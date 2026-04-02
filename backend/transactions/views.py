@@ -1,3 +1,6 @@
+import csv
+from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -96,3 +99,53 @@ class SummaryView(APIView):
             'monthly_trend': monthly_trend,
             'recent_transactions': recent_data,
         })
+
+
+class ExportTransactionsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
+        type_filter = request.query_params.get('type')
+
+        queryset = Transaction.objects.filter(
+            user=request.user
+        ).select_related('category').order_by('-date')
+
+        if month:
+            y, m = month.split('-')
+            queryset = queryset.filter(date__year=y, date__month=m)
+        if year:
+            queryset = queryset.filter(date__year=year)
+        if type_filter:
+            queryset = queryset.filter(type=type_filter)
+
+        # Build filename
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"transactions_{timestamp}.csv"
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        writer = csv.writer(response)
+
+        # Header row
+        writer.writerow([
+            'Date', 'Title', 'Type', 'Category',
+            'Amount', 'Note', 'Created At'
+        ])
+
+        # Data rows
+        for tx in queryset:
+            writer.writerow([
+                tx.date,
+                tx.title,
+                tx.type.capitalize(),
+                tx.category.name if tx.category else 'Uncategorized',
+                tx.amount,
+                tx.note,
+                tx.created_at.strftime('%Y-%m-%d %H:%M'),
+            ])
+
+        return response
