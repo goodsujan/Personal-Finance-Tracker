@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -65,13 +66,13 @@ class SavingsGoalViewSet(viewsets.ModelViewSet):
         if not amount:
             return Response({'error': 'Amount is required.'}, status=400)
         try:
-            amount = float(amount)
+            amount = Decimal(str(amount))
             if amount <= 0:
                 raise ValueError
-        except ValueError:
+        except (ValueError, Exception):
             return Response({'error': 'Amount must be a positive number.'}, status=400)
 
-        goal.saved_amount = float(goal.saved_amount) + amount
+        goal.saved_amount = goal.saved_amount + amount
         if goal.is_completed:
             goal.status = 'completed'
         goal.save()

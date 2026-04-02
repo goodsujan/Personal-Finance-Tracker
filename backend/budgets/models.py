@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from transactions.models import Category
@@ -83,7 +84,7 @@ class SavingsGoal(models.Model):
 
     @property
     def remaining_amount(self):
-        return max(self.target_amount - self.saved_amount, 0)
+        return max(self.target_amount - self.saved_amount, Decimal('0'))
 
     @property
     def progress_percentage(self):
@@ -107,7 +108,7 @@ class SavingsGoal(models.Model):
     def monthly_required(self):
         if not self.deadline or self.days_remaining == 0:
             return None
-        months = self.days_remaining / 30
+        months = Decimal(str(self.days_remaining)) / Decimal('30')
         if months <= 0:
             return None
-        return round(float(self.remaining_amount) / months, 2)
+        return round(float(self.remaining_amount / months), 2)
