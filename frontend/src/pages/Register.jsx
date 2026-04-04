@@ -1,122 +1,101 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Mail, Lock, User, Wallet } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../components/ui/Toast'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
 
 export default function Register() {
   const { register } = useAuth()
+  const toast = useToast()
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' })
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
     if (form.password !== form.confirm) {
-      setError('Passwords do not match.')
+      toast({ message: 'Passwords do not match.', type: 'error' })
       return
     }
     if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.')
+      toast({ message: 'Password must be at least 8 characters.', type: 'error' })
       return
     }
     setLoading(true)
     try {
       await register(form.username, form.email, form.password)
+      toast({ message: 'Account created! Welcome to FinTrack.', type: 'success' })
       navigate('/dashboard')
     } catch (err) {
       const data = err.response?.data
-      if (data?.email) setError(data.email[0])
-      else if (data?.username) setError(data.username[0])
-      else setError('Registration failed. Please try again.')
+      const msg = data
+        ? Object.values(data).flat()[0]
+        : 'Registration failed. Please try again.'
+      toast({ message: msg, type: 'error' })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: 'var(--bg-secondary)' }}>
+      <div className="w-full max-w-md">
 
-        {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl font-bold">F</span>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: 'var(--accent)' }}>
+            <Wallet size={24} color="white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create account</h1>
-          <p className="text-gray-500 mt-1">Start tracking your finances today</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Create account</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            Start tracking your finances today
+          </p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-6 text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-            <input
-              type="text"
-              required
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-8 shadow-[var(--shadow-md)]">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input label="Username" type="text" required
               value={form.username}
               onChange={e => setForm({ ...form, username: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               placeholder="johndoe"
+              leftIcon={<User size={16} />}
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-            <input
-              type="email"
-              required
+            <Input label="Email address" type="email" required
               value={form.email}
               onChange={e => setForm({ ...form, email: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               placeholder="you@example.com"
+              leftIcon={<Mail size={16} />}
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
+            <Input label="Password" type="password" required
               value={form.password}
               onChange={e => setForm({ ...form, password: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               placeholder="Min. 8 characters"
+              leftIcon={<Lock size={16} />}
+              hint="Must be at least 8 characters"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-            <input
-              type="password"
-              required
+            <Input label="Confirm password" type="password" required
               value={form.confirm}
               onChange={e => setForm({ ...form, confirm: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               placeholder="••••••••"
+              leftIcon={<Lock size={16} />}
             />
-          </div>
+            <Button type="submit" size="lg" loading={loading} className="w-full">
+              Create account
+            </Button>
+          </form>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium rounded-lg py-2.5 text-sm transition-colors"
-          >
-            {loading ? 'Creating account...' : 'Create account'}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Already have an account?{' '}
-          <Link to="/login" className="text-indigo-600 font-medium hover:underline">
-            Sign in
-          </Link>
-        </p>
+          <p className="text-center text-sm text-[var(--text-muted)] mt-6">
+            Already have an account?{' '}
+            <Link to="/login"
+              className="font-medium hover:underline"
+              style={{ color: 'var(--accent)' }}>
+              Sign in
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )
