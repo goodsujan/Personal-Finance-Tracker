@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react'
+import {
+  X, DollarSign, Calendar, Tag,
+  FileText, Upload, Check, ArrowUpCircle, ArrowDownCircle
+} from 'lucide-react'
 import api from '../api/axios'
+import { useToast } from './ui/Toast'
+import Button from './ui/Button'
+import Input from './ui/Input'
 
 export default function TransactionModal({ onClose, onSave, editData = null }) {
+  const toast = useToast()
   const [categories, setCategories] = useState([])
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [preview, setPreview] = useState(null)
   const [form, setForm] = useState({
     title: '',
     amount: '',
@@ -12,9 +23,6 @@ export default function TransactionModal({ onClose, onSave, editData = null }) {
     note: '',
     receipt: null,
   })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [preview, setPreview] = useState(null)
 
   useEffect(() => {
     api.get('/categories/').then(res => setCategories(res.data))
@@ -23,27 +31,40 @@ export default function TransactionModal({ onClose, onSave, editData = null }) {
         title: editData.title || '',
         amount: editData.amount || '',
         type: editData.type || 'expense',
-        date: editData.date || '',
+        date: editData.date || new Date().toISOString().split('T')[0],
         category: editData.category || '',
         note: editData.note || '',
         receipt: null,
       })
       if (editData.receipt_url) setPreview(editData.receipt_url)
+      setStep(1)
     }
   }, [editData])
 
-  const filtered = categories.filter(c => c.type === form.type)
+  const filteredCategories = categories.filter(c => c.type === form.type)
+
+  const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }))
 
   const handleFile = (e) => {
     const file = e.target.files[0]
     if (!file) return
-    setForm({ ...form, receipt: file })
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ message: 'File too large. Max 5MB.', type: 'error' })
+      return
+    }
+    set('receipt', file)
     setPreview(URL.createObjectURL(file))
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
+  const handleSubmit = async () => {
+    if (!form.title.trim()) {
+      toast({ message: 'Please enter a title.', type: 'error' })
+      return
+    }
+    if (!form.amount || parseFloat(form.amount) <= 0) {
+      toast({ message: 'Please enter a valid amount.', type: 'error' })
+      return
+    }
     setLoading(true)
     try {
       const payload = new FormData()
@@ -57,17 +78,17 @@ export default function TransactionModal({ onClose, onSave, editData = null }) {
 
       if (editData) {
         await api.patch(`/transactions/${editData.id}/`, payload)
+        toast({ message: 'Transaction updated!', type: 'success' })
       } else {
         await api.post('/transactions/', payload)
+        toast({ message: 'Transaction added!', type: 'success' })
       }
       onSave()
       onClose()
     } catch (err) {
       const data = err.response?.data
-      const msg = data
-        ? Object.values(data).flat().join(' ')
-        : 'Something went wrong.'
-      setError(msg)
+      const msg = data ? Object.values(data).flat().join(' ') : 'Something went wrong.'
+      toast({ message: msg, type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -75,163 +96,230 @@ export default function TransactionModal({ onClose, onSave, editData = null }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.45)' }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-[var(--bg-card)] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl border border-[var(--border)] shadow-[var(--shadow-lg)] overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">
-            {editData ? 'Edit Transaction' : 'New Transaction'}
-          </h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+          <div>
+            <h2 className="font-semibold text-[var(--text-primary)]">
+              {editData ? 'Edit Transaction' : 'New Transaction'}
+            </h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Step {step} of 2 — {step === 1 ? 'Basic details' : 'Category & notes'}
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="p-2 rounded-xl hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] transition-colors"
           >
-            ×
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg px-4 py-2.5 text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Type toggle */}
-          <div className="flex rounded-xl overflow-hidden border border-gray-200">
-            {['expense', 'income'].map(t => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setForm({ ...form, type: t, category: '' })}
-                className={`flex-1 py-2.5 text-sm font-medium transition-colors capitalize ${
-                  form.type === t
-                    ? t === 'expense'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-green-500 text-white'
-                    : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {t === 'expense' ? '↓ Expense' : '↑ Income'}
-              </button>
-            ))}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-            <input
-              required
-              value={form.title}
-              onChange={e => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Grocery shopping"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        {/* Step indicator */}
+        <div className="flex gap-1 px-5 pt-4">
+          {[1, 2].map(s => (
+            <div
+              key={s}
+              className="h-1 flex-1 rounded-full transition-all duration-300"
+              style={{ background: step >= s ? 'var(--accent)' : 'var(--bg-tertiary)' }}
             />
-          </div>
+          ))}
+        </div>
 
-          {/* Amount + Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input
-                required
+        <div className="px-5 py-5 space-y-5">
+
+          {step === 1 && (
+            <>
+              {/* Type selector */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { val: 'expense', label: 'Expense', icon: ArrowDownCircle, color: 'var(--danger)' },
+                  { val: 'income',  label: 'Income',  icon: ArrowUpCircle,   color: 'var(--success)' },
+                ].map(({ val, label, icon: Icon, color }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => { set('type', val); set('category', '') }}
+                    className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-150"
+                    style={{
+                      borderColor: form.type === val ? color : 'var(--border)',
+                      background: form.type === val ? color + '10' : 'var(--bg-secondary)',
+                    }}
+                  >
+                    <Icon
+                      size={24}
+                      style={{ color: form.type === val ? color : 'var(--text-muted)' }}
+                    />
+                    <span
+                      className="text-sm font-medium"
+                      style={{ color: form.type === val ? color : 'var(--text-secondary)' }}
+                    >
+                      {label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Title */}
+              <Input
+                label="What was this for?"
+                placeholder={form.type === 'expense' ? 'e.g. Grocery shopping' : 'e.g. Monthly salary'}
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+                leftIcon={<FileText size={15} />}
+              />
+
+              {/* Amount */}
+              <Input
+                label="Amount"
                 type="number"
                 step="0.01"
                 min="0.01"
-                value={form.amount}
-                onChange={e => setForm({ ...form, amount: e.target.value })}
                 placeholder="0.00"
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={form.amount}
+                onChange={e => set('amount', e.target.value)}
+                leftIcon={<DollarSign size={15} />}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input
-                required
+
+              {/* Date */}
+              <Input
+                label="Date"
                 type="date"
                 value={form.date}
-                onChange={e => setForm({ ...form, date: e.target.value })}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                onChange={e => set('date', e.target.value)}
+                leftIcon={<Calendar size={15} />}
               />
-            </div>
-          </div>
+            </>
+          )}
 
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <select
-              value={form.category}
-              onChange={e => setForm({ ...form, category: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          {step === 2 && (
+            <>
+              {/* Category grid */}
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)] mb-2">Category</p>
+                {filteredCategories.length === 0 ? (
+                  <p className="text-sm text-[var(--text-muted)]">No categories found.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {filteredCategories.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => set('category', cat.id)}
+                        className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center"
+                        style={{
+                          borderColor: form.category === cat.id ? cat.color : 'var(--border)',
+                          background: form.category === cat.id ? cat.color + '15' : 'var(--bg-secondary)',
+                        }}
+                      >
+                        {form.category === cat.id && (
+                          <Check size={12} style={{ color: cat.color }} className="absolute top-1 right-1" />
+                        )}
+                        <span
+                          className="text-xs font-medium leading-tight"
+                          style={{ color: form.category === cat.id ? cat.color : 'var(--text-secondary)' }}
+                        >
+                          {cat.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+                  Note <span className="text-[var(--text-muted)] font-normal">(optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.note}
+                  onChange={e => set('note', e.target.value)}
+                  placeholder="Add any extra details..."
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent resize-none transition-all"
+                />
+              </div>
+
+              {/* Receipt upload */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+                  Receipt <span className="text-[var(--text-muted)] font-normal">(optional)</span>
+                </label>
+                <label className="flex items-center gap-3 border-2 border-dashed border-[var(--border)] rounded-xl px-4 py-4 cursor-pointer hover:border-[var(--accent)] hover:bg-[var(--accent-light)] transition-all group">
+                  <Upload size={18} style={{ color: 'var(--text-muted)' }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition-colors truncate">
+                      {form.receipt ? form.receipt.name : 'Click to upload receipt image'}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">PNG, JPG up to 5MB</p>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
+                </label>
+                {preview && (
+                  <div className="mt-3 relative">
+                    <img
+                      src={preview}
+                      alt="Receipt preview"
+                      className="w-full max-h-36 object-cover rounded-xl border border-[var(--border)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setPreview(null); set('receipt', null) }}
+                      className="absolute top-2 right-2 p-1 rounded-lg bg-[var(--danger)] text-white"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-5 pb-5">
+          {step === 2 && (
+            <Button
+              variant="outline"
+              onClick={() => setStep(1)}
+              className="flex-1"
             >
-              <option value="">Select category</option>
-              {filtered.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Note */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Note <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={form.note}
-              onChange={e => setForm({ ...form, note: e.target.value })}
-              rows={2}
-              placeholder="Add a note..."
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-            />
-          </div>
-
-          {/* Receipt upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Receipt <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:border-indigo-400 transition-colors">
-              <span className="text-gray-400 text-lg">📎</span>
-              <span className="text-sm text-gray-500">
-                {form.receipt ? form.receipt.name : 'Click to upload receipt'}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFile}
-                className="hidden"
-              />
-            </label>
-            {preview && (
-              <img
-                src={preview}
-                alt="Receipt preview"
-                className="mt-2 rounded-xl w-full max-h-32 object-cover border border-gray-100"
-              />
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+              Back
+            </Button>
+          )}
+          {step === 1 ? (
+            <Button
+              onClick={() => {
+                if (!form.title.trim()) {
+                  toast({ message: 'Please enter a title.', type: 'error' })
+                  return
+                }
+                if (!form.amount || parseFloat(form.amount) <= 0) {
+                  toast({ message: 'Please enter a valid amount.', type: 'error' })
+                  return
+                }
+                setStep(2)
+              }}
+              className="flex-1"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium transition-colors"
+              Continue →
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              loading={loading}
+              className="flex-1"
             >
-              {loading ? 'Saving...' : editData ? 'Save changes' : 'Add transaction'}
-            </button>
-          </div>
-        </form>
+              {editData ? 'Save changes' : 'Add transaction'}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
